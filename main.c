@@ -23,7 +23,8 @@
  */
 
 typedef struct ether_header eth_hdr_t[1];
-unsigned char *kStringMacAddress = "/sys/class/net/eth0/address";
+unsigned char *kStringMacAddressDev = "/sys/class/net/eth0/address";
+// unsigned char *kStringMacAddress = "00:1c:42:f1:65:53";
 
 /*
  * pcap_open_live parameter(dev, len, promisc, ms, errbuf)
@@ -80,17 +81,16 @@ int get_ether_header(eth_hdr_t _eth_hdr, const u_char *_packet)
 
 u_char *get_mac_address()
 {
-	FILE *fp = fopen(kStringMacAddress, "r");
+	FILE *fp = fopen(kStringMacAddressDev, "r");
 	int i;
 	u_char str_mac_address[ETHER_ADDR_LEN * 3] = {'\0', };
 	u_char *mac_address = (u_char *) malloc (ETHER_ADDR_LEN * sizeof(u_char));
 
 	fgets(str_mac_address, ETHER_ADDR_LEN * 3, fp);
-	printf("mac : %s\n", str_mac_address);
-	printf("mac : %02X\n", (unsigned char *) ether_aton(str_mac_address));
-	// printf("mac : %02X %02X %02X %02X %02X %02X\n", (unsigned char *) ether_aton(str_mac_address)[0], (unsigned char *) ether_aton(str_mac_address)[1], (unsigned char *) ether_aton(str_mac_address)[2], (unsigned char *) ether_aton(str_mac_address)[3], (unsigned char *) ether_aton(str_mac_address)[4], (unsigned char *) ether_aton(str_mac_address)[5]);
 	for (i=0; i<ETHER_ADDR_LEN; i++)
 		mac_address[i] = strtol(&str_mac_address[i*3], NULL, 16);
+//	for (i=0; i<ETHER_ADDR_LEN; i++)
+//		mac_address[i] = strtol(&kStringMacAddress[i*3], NULL, 16);
 	fclose(fp);
 	printf("mac : %s\n", mac_address);
 
@@ -152,6 +152,7 @@ u_char *create_arp_packet(u_char *_spa, u_char *_tpa)
 
 	free(mac_addr_buf);
 
+	
 	printf("## ether info\n");
 	printf("dst mac : %s\n", ether_ntoa((struct ether_addr *)eth_hdr->ether_dhost));
 	printf("src mac : %s\n", ether_ntoa((struct ether_addr *)eth_hdr->ether_shost));
