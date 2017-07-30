@@ -5,8 +5,8 @@
 
 #include <pcap.h>
 #include <arpa/inet.h>
-#include <netinet/if_ether.h>
-// #include <netinet/ether.h>
+#include <netinet/ether.h>
+// #include <netinet/if_ether.h>
 /*
  * netinet/ether.h
  * 		- ether_ntoa()
@@ -23,8 +23,7 @@
  *		- define ARPOP_REQUEST 1
  */
 
-unsigned char *kStringMacAddressDev = "/sys/class/net/eth0/address";
-
+const unsigned char *kStringMacAddressDev = "/sys/class/net/eth0/address";
 
 /*
  * pcap_open_live parameter(dev, len, promisc, ms, errbuf)
@@ -249,7 +248,6 @@ int main(int argc, char *argv[])
 			}
 			default:
 			{
-				printf("Ether type : others...\n");
 				break;
 			}
 		}
