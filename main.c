@@ -5,7 +5,8 @@
 
 #include <pcap.h>
 #include <arpa/inet.h>
-#include <netinet/ether.h>
+#include <netinet/if_ether.h>
+// #include <netinet/ether.h>
 /*
  * netinet/ether.h
  * 		- ether_ntoa()
@@ -22,9 +23,8 @@
  *		- define ARPOP_REQUEST 1
  */
 
-typedef struct ether_header eth_hdr_t[1];
 unsigned char *kStringMacAddressDev = "/sys/class/net/eth0/address";
-// unsigned char *kStringMacAddress = "00:1c:42:f1:65:53";
+
 
 /*
  * pcap_open_live parameter(dev, len, promisc, ms, errbuf)
@@ -68,39 +68,63 @@ void init_pcap(pcap_t **handle, char *_filter_exp, char *_dev)
 }
 
 
-int get_ether_header(eth_hdr_t _eth_hdr, const u_char *_packet)
-{
-	struct ether_header *eth_hdr = (struct ether_header *) _packet;
-	memcpy(_eth_hdr->ether_dhost, eth_hdr->ether_dhost, sizeof(_eth_hdr->ether_dhost));
-	memcpy(_eth_hdr->ether_shost, eth_hdr->ether_shost, sizeof(_eth_hdr->ether_shost));
-	_eth_hdr->ether_type = ntohs(eth_hdr->ether_type);
-
-	return sizeof(struct ether_header);
-}
-
 
 u_char *get_mac_address()
 {
-	FILE *fp = fopen(kStringMacAddressDev, "r");
 	int i;
+	FILE *fp = fopen(kStringMacAddressDev, "r");
 	u_char str_mac_address[ETHER_ADDR_LEN * 3] = {'\0', };
 	u_char *mac_address = (u_char *) malloc (ETHER_ADDR_LEN * sizeof(u_char));
+
 
 	fgets(str_mac_address, ETHER_ADDR_LEN * 3, fp);
 	for (i=0; i<ETHER_ADDR_LEN; i++)
 		mac_address[i] = strtol(&str_mac_address[i*3], NULL, 16);
-//	for (i=0; i<ETHER_ADDR_LEN; i++)
-//		mac_address[i] = strtol(&kStringMacAddress[i*3], NULL, 16);
 	fclose(fp);
-	printf("mac : %s\n", mac_address);
+
 
 	return mac_address;
 }
-
-
-u_char *get_ip_address(const u_char *_ip)
+/*
+u_char *get_mac_address()
 {
+	int i;
+	// static u_char *kStringMacAddress = "a0:99:9b:19:6b:e9";	// mac os
+	static u_char *kStringMacAddress = "00:1c:42:f1:65:53";	// kali os
+	u_char *mac_address = (u_char *) malloc (ETHER_ADDR_LEN * sizeof(u_char));
 
+	for (i=0; i<ETHER_ADDR_LEN; i++)
+		mac_address[i] = strtol(&kStringMacAddress[i*3], NULL, 16);
+
+	return mac_address;
+}
+*/
+
+void print_ether_info(struct ether_header *_eth_hdr)
+{
+	printf("## ether info\n");
+	printf("dst mac : %s\n", ether_ntoa((struct ether_addr *)_eth_hdr->ether_dhost));
+	printf("src mac : %s\n", ether_ntoa((struct ether_addr *)_eth_hdr->ether_shost));
+	printf("type	: %02X\n", _eth_hdr->ether_type);
+}
+
+
+void print_arp_info(struct ether_arp *_arp_hdr)
+{
+	u_char ip_addr_buf[20] = {'\0', };
+	printf("## arp info\n");
+	printf("hw type        : %d\n", htons(_arp_hdr->ea_hdr.ar_hrd));
+	printf("proto type     : %d\n", htons(_arp_hdr->ea_hdr.ar_pro));
+	printf("hw addr len    : %d\n", _arp_hdr->ea_hdr.ar_hln);
+	printf("proto addr len : %d\n", _arp_hdr->ea_hdr.ar_pln);
+	printf("opt            : %d\n", htons(_arp_hdr->ea_hdr.ar_op));
+	printf("sender mac     : %s\n", ether_ntoa((struct ether_addr *)_arp_hdr->arp_sha));
+	inet_ntop(AF_INET, _arp_hdr->arp_spa, ip_addr_buf, sizeof(ip_addr_buf));
+	printf("sender ip      : %s\n", ip_addr_buf);
+	printf("target mac     : %s\n", ether_ntoa((struct ether_addr *)_arp_hdr->arp_tha));
+	inet_ntop(AF_INET, _arp_hdr->arp_tpa, ip_addr_buf, sizeof(ip_addr_buf));
+	printf("target ip      : %s\n", ip_addr_buf);
+	
 }
 
 
@@ -134,15 +158,16 @@ u_char *create_arp_packet(u_char *_spa, u_char *_tpa)
 	memset(eth_hdr->ether_dhost, 0xff, ETHER_ADDR_LEN);
 	mac_addr_buf = get_mac_address();
 	memcpy(eth_hdr->ether_shost, mac_addr_buf, ETHER_ADDR_LEN);
-	eth_hdr->ether_type = ntohs(ETHERTYPE_ARP);
+	eth_hdr->ether_type = htons(ETHERTYPE_ARP);
 
 	// initialize arp header.
 	arp_hdr = (struct ether_arp *) (packet+sizeof(struct ether_header));
-	arp_hdr->ea_hdr.ar_hrd = ntohs(ARPHRD_ETHER);
-	arp_hdr->ea_hdr.ar_pro = ntohs(ETHERTYPE_ARP);
+	arp_hdr->ea_hdr.ar_hrd = htons(ARPHRD_ETHER);
+//	arp_hdr->ea_hdr.ar_pro = htohs(ETHERTYPE_ARP);
+	arp_hdr->ea_hdr.ar_pro = htons(ETHERTYPE_IP);
 	arp_hdr->ea_hdr.ar_hln = ETHER_ADDR_LEN;
 	arp_hdr->ea_hdr.ar_pln = 4;
-	arp_hdr->ea_hdr.ar_op = ntohs(ARPOP_REQUEST);
+	arp_hdr->ea_hdr.ar_op = htons(ARPOP_REQUEST);
 	memcpy(arp_hdr->arp_sha, mac_addr_buf, ETHER_ADDR_LEN);
 	inet_pton(AF_INET, _spa, ip_addr_buf);
 	memcpy(arp_hdr->arp_spa, ip_addr_buf, 4);
@@ -150,29 +175,14 @@ u_char *create_arp_packet(u_char *_spa, u_char *_tpa)
 	inet_pton(AF_INET, _tpa, ip_addr_buf);
 	memcpy(arp_hdr->arp_tpa, ip_addr_buf, 4);
 
+	// free buffer.
 	free(mac_addr_buf);
 
-	
-	printf("## ether info\n");
-	printf("dst mac : %s\n", ether_ntoa((struct ether_addr *)eth_hdr->ether_dhost));
-	printf("src mac : %s\n", ether_ntoa((struct ether_addr *)eth_hdr->ether_shost));
-	printf("type	: %02X\n", eth_hdr->ether_type);
-	printf("## arp info\n");
-	printf("hw type        : %d\n", arp_hdr->ea_hdr.ar_hrd);
-	printf("proto type     : %d\n", arp_hdr->ea_hdr.ar_pro);
-	printf("hw addr len    : %d\n", arp_hdr->ea_hdr.ar_hln);
-	printf("proto addr len : %d\n", arp_hdr->ea_hdr.ar_pln);
-	printf("opt            : %d\n", arp_hdr->ea_hdr.ar_op);
-	printf("sender mac     : %s\n", ether_ntoa((struct ether_addr *)arp_hdr->arp_sha));
-	// printf("sender ip      : %s\n", arp_hdr->arp_spa);
-	inet_ntop(AF_INET, arp_hdr->arp_spa, ip_addr_buf, sizeof(ip_addr_buf));
-	printf("sender ip      : %s\n", ip_addr_buf);
-	printf("target mac     : %s\n", ether_ntoa((struct ether_addr *)arp_hdr->arp_tha));
-	// printf("target ip      : %s\n", arp_hdr->arp_tpa);
-	inet_ntop(AF_INET, arp_hdr->arp_tpa, ip_addr_buf, sizeof(ip_addr_buf));
-	printf("target ip      : %s\n", ip_addr_buf);
-
-
+	// print arp packet information.
+	printf("########## send arp packet ##########\n");	
+	print_ether_info(eth_hdr);
+	print_arp_info(arp_hdr);
+	printf("\n");
 
 	return packet;
 }
@@ -186,13 +196,14 @@ u_char *create_arp_packet(u_char *_spa, u_char *_tpa)
 int main(int argc, char *argv[])
 {
 	pcap_t *handle;         /* Session handle */
-	char filter_exp[] = "port 80";  /* The filter expression */
+	char filter_exp[] = "";  /* The filter expression */
+//	char filter_exp[] = "port 80";  /* The filter expression */
 	struct pcap_pkthdr *header; /* The header that pcap gives us */
 	const u_char *packet;       /* The actual packet */
 	u_char *arp_packet;       /* The actual packet */
 
 	int re, offset;
-	eth_hdr_t eth_hdr;
+	struct ether_header *eth_hdr;
 	
 	// check input format.
 	if(argc < 4)
@@ -205,27 +216,35 @@ int main(int argc, char *argv[])
 
 	init_pcap(&handle, filter_exp, argv[1]);
 	arp_packet = create_arp_packet(argv[2], argv[3]);
-	pcap_sendpacket(handle, arp_packet, sizeof(struct ether_header) + sizeof(struct ether_arp));
-	free(arp_packet);
-/*
+	/*
+	 * int pcap_sendpacket(pcap_t *p, u_char *buf, int size)
+	 *
+	 * If the packet is successly sent, return 0.
+	 * otherwise, return -1.
+	 */
+	if(0 !=  pcap_sendpacket(handle, arp_packet, (sizeof(struct ether_header)+sizeof(struct ether_arp))))
+	{
+		printf("Sending packet fail...\n");
+		return 0;
+	}
+
 	while( 0 <= (re = pcap_next_ex(handle, &header, &packet)) )
 	{
 		if( 0 == re )
 			continue;
 
-		offset = get_ether_header(eth_hdr, packet);
-//		printf("ether type: %x\n", (int)eth_hdr->ether_type & 0x0000ffff);
-//		printf("ether type: %x\n", ETHERTYPE_IP);
-		switch( (int)eth_hdr->ether_type & 0x0000ffff)
+		eth_hdr = (struct ether_header *) packet;
+		switch((ntohs(eth_hdr->ether_type) & 0x0000ffff))
 		{
 			case ETHERTYPE_ARP:
 			{
-				printf("Ether type : ARP...\n");
-				break;
-			}
-			case ETHERTYPE_IP:
-			{
-//				printf("Ether type : IP\n");
+				struct ether_arp *arp_hdr = (struct ether_arp *)(packet + sizeof(struct ether_header));
+
+				// print arp packet infomation.
+				printf("########## receive arp packet ##########\n");	
+				print_ether_info(eth_hdr);
+				print_arp_info(arp_hdr);
+				printf("\n");
 				break;
 			}
 			default:
@@ -235,7 +254,7 @@ int main(int argc, char *argv[])
 			}
 		}
 	}
-*/
+	free(arp_packet);
 	pcap_close(handle);
 
 
